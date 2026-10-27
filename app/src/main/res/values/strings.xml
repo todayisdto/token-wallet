@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">词元钱包</string>
+    <string name="widget_description">DeepSeek 与阿里云余额</string>
+    <string name="widget_4x2_name">词元钱包 4×2</string>
+    <string name="widget_2x2_name">词元钱包 2×2</string>
+    <string name="widget_2x2_description">2×2 方版余额小组件</string>
+
+    <string-array name="refresh_intervals">
+        <item>30 分钟</item>
+        <item>1 小时</item>
+        <item>3 小时</item>
+        <item>6 小时</item>
+    </string-array>
+</resources>
