@@ -16,3 +16,4 @@ captures/
 keystore.properties
 keystore/
 *.b64
+preview/

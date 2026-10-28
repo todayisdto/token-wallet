@@ -17,8 +17,12 @@
     <color name="outline">#FF2A3242</color>
 
     <color name="success">#FF34D399</color>
+    <color name="success_text">#FF34D399</color>
     <color name="error">#FFF87171</color>
+    <color name="error_text">#FFF87171</color>
     <color name="text_secondary">#FFA3ACBF</color>
+    <color name="text_tertiary">#FF7A839A</color>
+    <color name="stale">#FFFBBF24</color>
 
     <color name="vendor_deepseek">#FF7E92FF</color>
     <color name="vendor_aliyun">#FFFF8A3D</color>

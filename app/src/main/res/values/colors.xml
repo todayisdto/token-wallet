@@ -23,10 +23,20 @@
     <color name="vendor_aliyun">#FFC2410C</color>
     <color name="vendor_deepseek_light">#FF3D4FE0</color>
     <color name="vendor_aliyun_light">#FFC2410C</color>
+    <!-- The widget palette asks for the dark colors even when the system is in
+         light mode (in-app "深色" theme). Without a default value here
+         getColor() throws Resources.NotFoundException and the widget stops
+         updating. Keep these in sync with values-night/colors.xml. -->
+    <color name="vendor_deepseek_dark">#FF7E92FF</color>
+    <color name="vendor_aliyun_dark">#FFFF8A3D</color>
 
     <color name="success">#FF10B981</color>
+    <color name="success_text">#FF059669</color>
     <color name="error">#FFEF4444</color>
+    <color name="error_text">#FFDC2626</color>
     <color name="text_secondary">#FF5B6478</color>
+    <color name="text_tertiary">#FF8A93A6</color>
+    <color name="stale">#FFB45309</color>
 
     <!-- Launcher icon ground: neutral slate, so hue on the icon means "vendor". -->
     <color name="ic_launcher_background">#FF23272E</color>
@@ -43,6 +53,8 @@
     <color name="widget_secondary_light">#FF5B6478</color>
     <color name="error_dark">#FFF87171</color>
     <color name="error_light">#FFDC2626</color>
+    <color name="stale_dark">#FFFBBF24</color>
+    <color name="stale_light">#FFB45309</color>
 
 
 </resources>

@@ -25,7 +25,11 @@ object SnapshotStore {
                 error = prefs.getString("ali_error", null),
                 updatedAt = prefs.getLong("ali_updated", 0L)
             ),
-            lastUpdated = prefs.getLong("last_updated", 0L)
+            // Older installs only have "last_updated"; show that until the first
+            // success after upgrading instead of "尚未更新".
+            lastUpdated = prefs.getLong("last_updated", 0L),
+            lastSuccessAt = prefs.getLong("last_success", prefs.getLong("last_updated", 0L)),
+            refreshRequestedAt = prefs.getLong("refresh_requested", 0L)
         )
     }
 
@@ -42,6 +46,19 @@ object SnapshotStore {
             .putString("ali_error", snapshot.aliyun.error)
             .putLong("ali_updated", snapshot.aliyun.updatedAt)
             .putLong("last_updated", snapshot.lastUpdated)
+            .putLong("last_success", snapshot.lastSuccessAt)
+            .putLong("refresh_requested", snapshot.refreshRequestedAt)
             .apply()
+    }
+
+    /**
+     * Marks a manual refresh as requested. The renderers treat this as a short
+     * lived "刷新中…" state, so a failed/never-run refresh cannot leave the
+     * widget stuck forever.
+     */
+    fun markRefreshRequested(context: Context): BalanceSnapshot {
+        val snapshot = load(context).copy(refreshRequestedAt = System.currentTimeMillis())
+        save(context, snapshot)
+        return snapshot
     }
 }

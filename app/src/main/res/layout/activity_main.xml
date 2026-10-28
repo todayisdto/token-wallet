@@ -438,6 +438,56 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
+                            android:text="刷新记录"
+                            android:textColor="?attr/colorOnSurface"
+                            android:textSize="18sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="最近 8 次自动或手动刷新"
+                            android:textColor="?attr/colorOnSurfaceVariant"
+                            android:textSize="12sp" />
+
+                        <LinearLayout
+                            android:id="@+id/refresh_log_list"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:orientation="vertical" />
+
+                        <TextView
+                            android:id="@+id/refresh_log_empty"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:text="还没有记录。自动或手动刷新后，这里会显示时间、来源和结果。"
+                            android:textColor="?attr/colorOnSurfaceVariant"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    app:cardBackgroundColor="?attr/colorSurface"
+                    app:cardCornerRadius="20dp"
+                    app:cardElevation="0dp"
+                    app:strokeColor="?attr/colorOutline"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
                             android:text="高级设置"
                             android:textColor="?attr/colorOnSurface"
                             android:textSize="18sp"
@@ -549,7 +599,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="2dp"
-                                    android:text="默认开启，不在最近任务显示；可随时关闭"
+                                    android:text="默认关闭，开启后离开 App 不在最近任务显示"
                                     android:textColor="?attr/colorOnSurfaceVariant"
                                     android:textSize="11sp" />
                             </LinearLayout>
@@ -559,7 +609,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginStart="4dp"
-                                android:checked="true"
+                                android:checked="false"
                                 android:clickable="true"
                                 android:focusable="true" />
                         </LinearLayout>

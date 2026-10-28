@@ -15,16 +15,27 @@ object WidgetRenderer {
     fun build(
         context: Context,
         snapshot: BalanceSnapshot,
-        refreshing: Boolean = false,
         themeMode: String = SettingsStore.THEME_SYSTEM
     ): RemoteViews {
         val palette = palette(context, themeMode)
         val systemTheme = themeMode == SettingsStore.THEME_SYSTEM
         val views = RemoteViews(context.packageName, R.layout.widget_balance)
 
+        val pending = isRefreshPending(snapshot)
+        val stale = !pending && isSnapshotStale(context, snapshot)
         views.setTextViewText(
             R.id.widget_updated,
-            if (refreshing) "刷新中…" else formatTime(context, snapshot.lastUpdated)
+            when {
+                pending -> "刷新中…"
+                stale -> "${formatTime(context, snapshot.lastSuccessAt)} · 旧"
+                else -> formatTime(context, snapshot.lastSuccessAt)
+            }
+        )
+        // Always set this explicitly: a reused RemoteViews keeps its last text
+        // color, so a stale marker would survive after the data got fresh.
+        views.setTextColor(
+            R.id.widget_updated,
+            if (stale) palette.stale else palette.secondary
         )
 
         // In system mode the layout uses values-night resources, so Android can
@@ -34,7 +45,6 @@ object WidgetRenderer {
                 views.setInt(R.id.widget_root, "setBackgroundColor", palette.background)
             }
             views.setTextColor(R.id.widget_title, palette.text)
-            views.setTextColor(R.id.widget_updated, palette.secondary)
             views.setTextColor(R.id.widget_settings, palette.secondary)
             views.setTextColor(R.id.widget_refresh, palette.text)
             views.setTextColor(R.id.widget_ds_label, palette.text)
@@ -124,6 +134,7 @@ object WidgetRenderer {
                 text = ContextCompat.getColor(context, R.color.widget_text_dark),
                 secondary = ContextCompat.getColor(context, R.color.widget_secondary_dark),
                 error = ContextCompat.getColor(context, R.color.error_dark),
+                stale = ContextCompat.getColor(context, R.color.stale_dark),
                 dsDot = ContextCompat.getColor(context, R.color.vendor_deepseek_dark),
                 aliDot = ContextCompat.getColor(context, R.color.vendor_aliyun_dark)
             )
@@ -133,6 +144,7 @@ object WidgetRenderer {
                 text = ContextCompat.getColor(context, R.color.widget_text_light),
                 secondary = ContextCompat.getColor(context, R.color.widget_secondary_light),
                 error = ContextCompat.getColor(context, R.color.error_light),
+                stale = ContextCompat.getColor(context, R.color.stale_light),
                 dsDot = ContextCompat.getColor(context, R.color.vendor_deepseek_light),
                 aliDot = ContextCompat.getColor(context, R.color.vendor_aliyun_light)
             )
@@ -144,6 +156,7 @@ object WidgetRenderer {
         val text: Int,
         val secondary: Int,
         val error: Int,
+        val stale: Int,
         val dsDot: Int,
         val aliDot: Int
     )

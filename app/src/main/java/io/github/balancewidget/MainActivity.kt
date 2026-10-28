@@ -1,13 +1,16 @@
 package io.github.balancewidget
 
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.view.LayoutInflater
 import android.view.View
 import android.widget.AdapterView
+import android.widget.LinearLayout
 import android.widget.RadioGroup
 import android.widget.Spinner
 import android.widget.TextView
@@ -28,6 +31,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
@@ -60,11 +67,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var hideRecentsRow: View
     private lateinit var hideRecentsSwitch: SwitchMaterial
     private lateinit var lastRefresh: TextView
+    private lateinit var refreshLogList: LinearLayout
+    private lateinit var refreshLogEmpty: TextView
 
     private var selectedTab = R.id.nav_config
     private var recreatingForTheme = false
 
     private val intervals = listOf(
+        15 to "15 分钟",
         30 to "30 分钟",
         60 to "1 小时",
         180 to "3 小时",
@@ -75,7 +85,8 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        settings = SettingsStore(this)
+        settings = SettingsStore.get(this)
+        settings.migrateLegacySettings()
         applyTheme(settings.themeMode)
         setContentView(R.layout.activity_main)
         applySystemBars()
@@ -87,18 +98,23 @@ class MainActivity : AppCompatActivity() {
         setupListeners()
         setupTabs(savedInstanceState)
         renderSnapshot(SnapshotStore.load(this))
+        renderRefreshLog()
 
-        BalanceWorker.schedulePeriodic(this, settings.refreshMinutes)
-        if (settings.hasAnyKey) {
-            BalanceWorker.enqueue(this)
-        }
+        BalanceWidgetProvider.scheduleBackgroundWork(this)
+        RefreshHeartbeat.schedule(this)
     }
 
     override fun onResume() {
         super.onResume()
         val snapshot = SnapshotStore.load(this)
         renderSnapshot(snapshot)
+        renderRefreshLog()
         BalanceWidgetProvider.updateAll(this, snapshot)
+        // Opening the app after hours should refresh, but a quick return from
+        // another screen should not fire another network request.
+        if (settings.hasAnyKey) {
+            BalanceWorker.enqueueIfStale(this, snapshot, RefreshLog.TRIGGER_APP)
+        }
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -142,6 +158,8 @@ class MainActivity : AppCompatActivity() {
         hideRecentsRow = findViewById(R.id.hide_recents_row)
         hideRecentsSwitch = findViewById(R.id.hide_recents_switch)
         lastRefresh = findViewById(R.id.last_refresh)
+        refreshLogList = findViewById(R.id.refresh_log_list)
+        refreshLogEmpty = findViewById(R.id.refresh_log_empty)
     }
 
     private fun prefill() {
@@ -210,8 +228,13 @@ class MainActivity : AppCompatActivity() {
             ) {
                 if (ignoreSpinnerChange) return
                 val minutes = intervals[position].first
+                // Spinner also fires once on the first layout with the restored
+                // value. That is not a user change: it must not reset the
+                // schedule or show a toast on every app launch.
+                if (minutes == settings.refreshMinutes) return
                 settings.refreshMinutes = minutes
                 BalanceWorker.reschedulePeriodic(this@MainActivity, minutes)
+                RefreshHeartbeat.schedule(this@MainActivity)
                 toast("刷新频率已改为 ${intervals[position].second}")
             }
 
@@ -241,17 +264,24 @@ class MainActivity : AppCompatActivity() {
 
             dsSave.isEnabled = true
             result.onSuccess { balance ->
+                if (!settings.secureStorageAvailable) {
+                    setStatus(dsStatus, "本机加密存储不可用，暂时无法保存 Key", false)
+                    return@onSuccess
+                }
                 settings.deepSeekKey = key
+                val now = System.currentTimeMillis()
                 val snapshot = SnapshotStore.load(this@MainActivity).copy(
                     deepSeek = balance,
-                    lastUpdated = System.currentTimeMillis()
+                    lastUpdated = now,
+                    lastSuccessAt = now,
+                    refreshRequestedAt = 0L
                 )
                 SnapshotStore.save(this@MainActivity, snapshot)
                 renderSnapshot(snapshot)
                 BalanceWidgetProvider.updateAll(this@MainActivity, snapshot)
                 setStatus(dsStatus, "已连接 · ${formatAmount(balance)}", true)
                 setExpanded(dsBody, dsChevron, false)
-                BalanceWorker.enqueue(this@MainActivity)
+                BalanceWorker.enqueue(this@MainActivity, RefreshLog.TRIGGER_SAVE)
             }.onFailure { error ->
                 setStatus(dsStatus, error.toUserMessage(), false)
             }
@@ -281,18 +311,25 @@ class MainActivity : AppCompatActivity() {
 
             aliSave.isEnabled = true
             result.onSuccess { balance ->
+                if (!settings.secureStorageAvailable) {
+                    setStatus(aliStatus, "本机加密存储不可用，暂时无法保存 Key", false)
+                    return@onSuccess
+                }
                 settings.aliyunId = id
                 settings.aliyunSecret = secret
+                val now = System.currentTimeMillis()
                 val snapshot = SnapshotStore.load(this@MainActivity).copy(
                     aliyun = balance,
-                    lastUpdated = System.currentTimeMillis()
+                    lastUpdated = now,
+                    lastSuccessAt = now,
+                    refreshRequestedAt = 0L
                 )
                 SnapshotStore.save(this@MainActivity, snapshot)
                 renderSnapshot(snapshot)
                 BalanceWidgetProvider.updateAll(this@MainActivity, snapshot)
                 setStatus(aliStatus, "已连接 · ${formatAmount(balance)}", true)
                 setExpanded(aliBody, aliChevron, false)
-                BalanceWorker.enqueue(this@MainActivity)
+                BalanceWorker.enqueue(this@MainActivity, RefreshLog.TRIGGER_SAVE)
             }.onFailure { error ->
                 setStatus(aliStatus, error.toUserMessage(), false)
             }
@@ -300,14 +337,39 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshAllNow() {
+        if (!settings.hasAnyKey) {
+            toast("请先配置 DeepSeek 或阿里云 Key")
+            return
+        }
         refreshNow.isEnabled = false
+        val pending = SnapshotStore.markRefreshRequested(this)
+        renderSnapshot(pending)
         lastRefresh.text = "正在刷新…"
+        BalanceWidgetProvider.updateAll(this, pending)
+        // Clears the widget's "刷新中…" even if this app is killed mid-refresh.
+        BalanceWorker.scheduleRefreshStateReset(this)
+
         lifecycleScope.launch {
-            val snapshot = repository.refreshAll()
-            refreshNow.isEnabled = true
-            renderSnapshot(snapshot)
-            BalanceWidgetProvider.updateAll(this@MainActivity, snapshot)
-            toast("刷新完成")
+            try {
+                val snapshot = repository.refreshAll(RefreshLog.TRIGGER_MANUAL)
+                renderSnapshot(snapshot)
+                renderRefreshLog()
+                BalanceWidgetProvider.updateAll(this@MainActivity, snapshot)
+                RefreshHeartbeat.schedule(this@MainActivity)
+                toast("刷新完成")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val snapshot = SnapshotStore.load(this@MainActivity)
+                    .copy(refreshRequestedAt = 0L)
+                SnapshotStore.save(this@MainActivity, snapshot)
+                renderSnapshot(snapshot)
+                renderRefreshLog()
+                BalanceWidgetProvider.updateAll(this@MainActivity, snapshot)
+                toast("刷新失败：${e.toUserMessage()}")
+            } finally {
+                refreshNow.isEnabled = true
+            }
         }
     }
 
@@ -337,11 +399,86 @@ class MainActivity : AppCompatActivity() {
             configured = settings.aliyunId.isNotBlank() && settings.aliyunSecret.isNotBlank(),
             balance = snapshot.aliyun
         )
-        lastRefresh.text = if (snapshot.lastUpdated <= 0L) {
-            "上次更新：尚未更新"
-        } else {
-            "上次更新：${formatTime(this, snapshot.lastUpdated)}"
+        val stale = isSnapshotStale(this, snapshot)
+        lastRefresh.text = when {
+            snapshot.lastSuccessAt <= 0L -> "上次成功更新：尚未更新"
+            stale -> "上次成功更新：${formatTime(this, snapshot.lastSuccessAt)}（数据可能过旧）"
+            else -> "上次成功更新：${formatTime(this, snapshot.lastSuccessAt)}"
         }
+        lastRefresh.setTextColor(
+            ContextCompat.getColor(this, if (stale) R.color.stale else R.color.text_secondary)
+        )
+    }
+
+    private fun renderRefreshLog() {
+        val entries = RefreshLog.load(this).take(8)
+        refreshLogList.removeAllViews()
+        refreshLogEmpty.visibility = if (entries.isEmpty()) View.VISIBLE else View.GONE
+        if (entries.isEmpty()) return
+
+        val inflater = LayoutInflater.from(this)
+        var lastDay: String? = null
+        entries.forEachIndexed { index, entry ->
+            val day = dayLabel(entry.at)
+            if (day != lastDay) {
+                val dayView = inflater.inflate(
+                    R.layout.item_refresh_log_day,
+                    refreshLogList,
+                    false
+                )
+                dayView.findViewById<TextView>(R.id.log_day).text = day
+                refreshLogList.addView(dayView)
+                lastDay = day
+            }
+
+            val row = inflater.inflate(R.layout.item_refresh_log, refreshLogList, false)
+            val textColorRes = when (entry.result) {
+                RefreshLog.RESULT_OK -> R.color.success_text
+                RefreshLog.RESULT_PARTIAL -> R.color.stale
+                else -> R.color.error_text
+            }
+            val dotColorRes = when (entry.result) {
+                RefreshLog.RESULT_OK -> R.color.success
+                RefreshLog.RESULT_PARTIAL -> R.color.stale
+                else -> R.color.error
+            }
+
+            row.findViewById<View>(R.id.log_dot).backgroundTintList =
+                ColorStateList.valueOf(ContextCompat.getColor(this, dotColorRes))
+            row.findViewById<TextView>(R.id.log_trigger).text = entry.trigger
+            row.findViewById<TextView>(R.id.log_result).apply {
+                text = entry.result
+                setTextColor(ContextCompat.getColor(this@MainActivity, textColorRes))
+            }
+            row.findViewById<TextView>(R.id.log_time).text = formatTime(this, entry.at)
+
+            val detail = row.findViewById<TextView>(R.id.log_detail)
+            if (entry.result != RefreshLog.RESULT_OK && entry.detail.isNotBlank()) {
+                detail.text = entry.detail
+                detail.setTextColor(ContextCompat.getColor(this, textColorRes))
+                detail.visibility = View.VISIBLE
+            }
+
+            row.findViewById<View>(R.id.log_divider).visibility =
+                if (index == entries.lastIndex) View.GONE else View.VISIBLE
+            refreshLogList.addView(row)
+        }
+    }
+
+    private fun dayLabel(timestamp: Long): String {
+        val day = Calendar.getInstance().apply { timeInMillis = timestamp }
+        val today = Calendar.getInstance()
+        val yesterday = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
+        return when {
+            sameDay(day, today) -> "今天"
+            sameDay(day, yesterday) -> "昨天"
+            else -> SimpleDateFormat("MM-dd", Locale.getDefault()).format(Date(timestamp))
+        }
+    }
+
+    private fun sameDay(first: Calendar, second: Calendar): Boolean {
+        return first.get(Calendar.YEAR) == second.get(Calendar.YEAR) &&
+            first.get(Calendar.DAY_OF_YEAR) == second.get(Calendar.DAY_OF_YEAR)
     }
 
     private fun updateProviderStatus(

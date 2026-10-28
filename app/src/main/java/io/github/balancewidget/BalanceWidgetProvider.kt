@@ -22,47 +22,40 @@ class BalanceWidgetProvider : AppWidgetProvider() {
                 WidgetRenderer.build(context, snapshot, themeMode = themeMode)
             )
         }
-        BalanceWorker.schedulePeriodic(context, refreshMinutes(context))
-        BalanceWorker.enqueueIfStale(context, snapshot)
+        scheduleBackgroundWork(context)
+        // Re-arms a lost alarm; the target itself is anchored to the last attempt.
+        RefreshHeartbeat.schedule(context)
+        BalanceWorker.enqueueIfStale(context, snapshot, RefreshLog.TRIGGER_SYSTEM)
     }
 
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
-        BalanceWorker.schedulePeriodic(context, refreshMinutes(context))
+        scheduleBackgroundWork(context)
+        RefreshHeartbeat.schedule(context)
     }
 
     override fun onDisabled(context: Context) {
         super.onDisabled(context)
-        val manager = AppWidgetManager.getInstance(context)
-        val squareIds = manager.getAppWidgetIds(
-            ComponentName(context, BalanceWidget2x2Provider::class.java)
-        )
-        if (squareIds.isEmpty()) {
-            WorkManager.getInstance(context).cancelUniqueWork(BalanceWorker.PERIODIC_NAME)
-        }
+        if (!hasAnyWidget(context)) cancelBackgroundWork(context)
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         if (intent.action == ACTION_REFRESH) {
+            val snapshot = SnapshotStore.markRefreshRequested(context)
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(
                 ComponentName(context, BalanceWidgetProvider::class.java)
             )
-            val snapshot = SnapshotStore.load(context)
             val themeMode = themeMode(context)
             ids.forEach { widgetId ->
                 manager.updateAppWidget(
                     widgetId,
-                    WidgetRenderer.build(
-                        context,
-                        snapshot,
-                        refreshing = true,
-                        themeMode = themeMode
-                    )
+                    WidgetRenderer.build(context, snapshot, themeMode = themeMode)
                 )
             }
-            BalanceWorker.enqueue(context)
+            BalanceWorker.enqueue(context, RefreshLog.TRIGGER_WIDGET)
+            BalanceWorker.scheduleRefreshStateReset(context)
         } else if (intent.action == Intent.ACTION_CONFIGURATION_CHANGED) {
             updateAll(context, SnapshotStore.load(context))
         }
@@ -86,12 +79,30 @@ class BalanceWidgetProvider : AppWidgetProvider() {
             BalanceWidget2x2Provider.updateAll(context, snapshot)
         }
 
+        fun hasAnyWidget(context: Context): Boolean {
+            val manager = AppWidgetManager.getInstance(context)
+            return manager.getAppWidgetIds(
+                ComponentName(context, BalanceWidgetProvider::class.java)
+            ).isNotEmpty() || manager.getAppWidgetIds(
+                ComponentName(context, BalanceWidget2x2Provider::class.java)
+            ).isNotEmpty()
+        }
+
+        fun scheduleBackgroundWork(context: Context) {
+            BalanceWorker.schedulePeriodic(context, refreshMinutes(context))
+        }
+
+        fun cancelBackgroundWork(context: Context) {
+            WorkManager.getInstance(context).cancelUniqueWork(BalanceWorker.PERIODIC_NAME)
+            RefreshHeartbeat.cancel(context)
+        }
+
         private fun refreshMinutes(context: Context): Int {
-            return runCatching { SettingsStore(context).refreshMinutes }.getOrDefault(60)
+            return runCatching { SettingsStore.get(context).refreshMinutes }.getOrDefault(60)
         }
 
         private fun themeMode(context: Context): String {
-            return runCatching { SettingsStore(context).themeMode }
+            return runCatching { SettingsStore.get(context).themeMode }
                 .getOrDefault(SettingsStore.THEME_SYSTEM)
         }
     }
