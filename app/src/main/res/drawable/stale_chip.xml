@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Stale marker pill. The fill is deliberately identical in day and night so
+     the marker reads the same in both themes; only its text colour is fixed
+     (dark on amber) and never follows the theme. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <corners android:radius="8dp" />
+    <solid android:color="@color/stale_chip_bg" />
+</shape>

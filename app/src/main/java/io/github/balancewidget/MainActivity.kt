@@ -1,0 +1,626 @@
+package io.github.balancewidget
+
+import android.content.Intent
+import android.content.res.ColorStateList
+import android.content.res.Configuration
+import android.graphics.Color
+import android.net.Uri
+import android.os.Bundle
+import android.provider.Settings
+import android.view.LayoutInflater
+import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import android.widget.LinearLayout
+import android.widget.RadioGroup
+import android.widget.Spinner
+import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.lifecycleScope
+import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.switchmaterial.SwitchMaterial
+import com.google.android.material.textfield.TextInputEditText
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+
+class MainActivity : AppCompatActivity() {
+
+    private lateinit var settings: SettingsStore
+    private lateinit var repository: BalanceRepository
+
+    private lateinit var dsHeader: View
+    private lateinit var dsBody: View
+    private lateinit var dsChevron: TextView
+    private lateinit var dsKey: TextInputEditText
+    private lateinit var dsSave: MaterialButton
+    private lateinit var dsConsole: TextView
+    private lateinit var dsStatus: TextView
+
+    private lateinit var aliHeader: View
+    private lateinit var aliBody: View
+    private lateinit var aliChevron: TextView
+    private lateinit var aliId: TextInputEditText
+    private lateinit var aliSecret: TextInputEditText
+    private lateinit var aliSave: MaterialButton
+    private lateinit var aliConsole: TextView
+    private lateinit var aliStatus: TextView
+
+    private lateinit var pageConfig: View
+    private lateinit var pageRefresh: View
+    private lateinit var bottomNav: BottomNavigationView
+
+    private lateinit var intervalSpinner: Spinner
+    private lateinit var themeGroup: RadioGroup
+    private lateinit var refreshNow: MaterialButton
+    private lateinit var batteryRow: View
+    private lateinit var hideRecentsRow: View
+    private lateinit var hideRecentsSwitch: SwitchMaterial
+    private lateinit var lastRefresh: TextView
+    private lateinit var lastRefreshChip: TextView
+    private lateinit var refreshLogList: LinearLayout
+    private lateinit var refreshLogEmpty: TextView
+
+    private var selectedTab = R.id.nav_config
+    private var recreatingForTheme = false
+
+    /**
+     * The single source of truth for the refresh interval options: the minutes
+     * value and the label live in the same entry, and the spinner is built from
+     * this list. The labels used to come from a separate string-array, which
+     * meant adding an option to one place silently mislabelled the other.
+     */
+    private val intervals = listOf(
+        15 to "15 分钟",
+        30 to "30 分钟",
+        60 to "1 小时",
+        180 to "3 小时",
+        360 to "6 小时"
+    )
+    private var ignoreSpinnerChange = false
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        settings = SettingsStore.get(this)
+        settings.migrateLegacySettings()
+        applyTheme(settings.themeMode)
+        setContentView(R.layout.activity_main)
+        applySystemBars()
+
+        repository = BalanceRepository(this)
+
+        bindViews()
+        prefill()
+        setupListeners()
+        setupTabs(savedInstanceState)
+        renderSnapshot(SnapshotStore.load(this))
+        renderRefreshLog()
+
+        BalanceWidgetProvider.scheduleBackgroundWork(this)
+        RefreshHeartbeat.schedule(this)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val snapshot = SnapshotStore.load(this)
+        renderSnapshot(snapshot)
+        renderRefreshLog()
+        BalanceWidgetProvider.updateAll(this, snapshot)
+        // Opening the app after hours should refresh, but a quick return from
+        // another screen should not fire another network request.
+        if (settings.hasAnyKey) {
+            BalanceWorker.enqueueIfStale(this, snapshot, RefreshLog.TRIGGER_APP)
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (settings.themeMode == SettingsStore.THEME_SYSTEM) {
+            BalanceWidgetProvider.updateAll(this, SnapshotStore.load(this))
+            recreatingForTheme = true
+            recreate()
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations && !recreatingForTheme && settings.hideRecents) {
+            finishAndRemoveTask()
+        }
+    }
+
+    private fun bindViews() {
+        pageConfig = findViewById(R.id.page_config)
+        pageRefresh = findViewById(R.id.page_refresh)
+        bottomNav = findViewById(R.id.bottom_nav)
+
+        dsHeader = findViewById(R.id.ds_header)
+        dsBody = findViewById(R.id.ds_body)
+        dsChevron = findViewById(R.id.ds_chevron)
+        dsKey = findViewById(R.id.ds_key)
+        dsSave = findViewById(R.id.ds_save)
+        dsConsole = findViewById(R.id.ds_console)
+        dsStatus = findViewById(R.id.ds_status)
+        aliHeader = findViewById(R.id.ali_header)
+        aliBody = findViewById(R.id.ali_body)
+        aliChevron = findViewById(R.id.ali_chevron)
+        aliId = findViewById(R.id.ali_id)
+        aliSecret = findViewById(R.id.ali_secret)
+        aliSave = findViewById(R.id.ali_save)
+        aliConsole = findViewById(R.id.ali_console)
+        aliStatus = findViewById(R.id.ali_status)
+        intervalSpinner = findViewById(R.id.interval_spinner)
+        themeGroup = findViewById(R.id.theme_group)
+        refreshNow = findViewById(R.id.refresh_now)
+        batteryRow = findViewById(R.id.battery_row)
+        hideRecentsRow = findViewById(R.id.hide_recents_row)
+        hideRecentsSwitch = findViewById(R.id.hide_recents_switch)
+        lastRefresh = findViewById(R.id.last_refresh)
+        lastRefreshChip = findViewById(R.id.last_refresh_chip)
+        refreshLogList = findViewById(R.id.refresh_log_list)
+        refreshLogEmpty = findViewById(R.id.refresh_log_empty)
+
+        intervalSpinner.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_item,
+            intervals.map { it.second }
+        ).apply {
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+    }
+
+    private fun prefill() {
+        dsKey.setText(settings.deepSeekKey)
+        aliId.setText(settings.aliyunId)
+        aliSecret.setText(settings.aliyunSecret)
+
+        val selected = intervals.indexOfFirst { it.first == settings.refreshMinutes }
+            .coerceAtLeast(0)
+        ignoreSpinnerChange = true
+        intervalSpinner.setSelection(selected, false)
+        ignoreSpinnerChange = false
+
+        when (settings.themeMode) {
+            SettingsStore.THEME_LIGHT -> themeGroup.check(R.id.theme_light)
+            SettingsStore.THEME_DARK -> themeGroup.check(R.id.theme_dark)
+            else -> themeGroup.check(R.id.theme_system)
+        }
+        hideRecentsSwitch.isChecked = settings.hideRecents
+
+        setExpanded(dsBody, dsChevron, settings.deepSeekKey.isBlank())
+        setExpanded(
+            aliBody,
+            aliChevron,
+            settings.aliyunId.isBlank() || settings.aliyunSecret.isBlank()
+        )
+    }
+
+    private fun setupListeners() {
+        dsSave.setOnClickListener { saveDeepSeek() }
+        aliSave.setOnClickListener { saveAliyun() }
+        dsConsole.setOnClickListener { openConsole(DEEPSEEK_CONSOLE_URL) }
+        aliConsole.setOnClickListener { openConsole(ALIYUN_CONSOLE_URL) }
+        refreshNow.setOnClickListener { refreshAllNow() }
+        batteryRow.setOnClickListener { openBatterySettings() }
+        hideRecentsSwitch.setOnCheckedChangeListener { _, checked ->
+            settings.hideRecents = checked
+            toast(
+                if (checked) "已开启：离开后不在最近任务显示"
+                else "已关闭：保留最近任务卡片"
+            )
+        }
+        hideRecentsRow.setOnClickListener { hideRecentsSwitch.toggle() }
+
+        dsHeader.setOnClickListener { toggle(dsBody, dsChevron) }
+        aliHeader.setOnClickListener { toggle(aliBody, aliChevron) }
+
+        themeGroup.setOnCheckedChangeListener { _, checkedId ->
+            if (checkedId == View.NO_ID) return@setOnCheckedChangeListener
+            val mode = when (checkedId) {
+                R.id.theme_light -> SettingsStore.THEME_LIGHT
+                R.id.theme_dark -> SettingsStore.THEME_DARK
+                else -> SettingsStore.THEME_SYSTEM
+            }
+            if (settings.themeMode != mode) {
+                settings.themeMode = mode
+                BalanceWidgetProvider.updateAll(this, SnapshotStore.load(this))
+                applyTheme(mode)
+            }
+        }
+
+        intervalSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(
+                parent: AdapterView<*>?,
+                view: View?,
+                position: Int,
+                id: Long
+            ) {
+                if (ignoreSpinnerChange) return
+                val minutes = intervals[position].first
+                // Spinner also fires once on the first layout with the restored
+                // value. That is not a user change: it must not reset the
+                // schedule or show a toast on every app launch.
+                if (minutes == settings.refreshMinutes) return
+                settings.refreshMinutes = minutes
+                BalanceWorker.reschedulePeriodic(this@MainActivity, minutes)
+                RefreshHeartbeat.schedule(this@MainActivity)
+                toast("刷新频率已改为 ${intervals[position].second}")
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
+    }
+
+    private fun saveDeepSeek() {
+        val key = dsKey.text?.toString()?.trim().orEmpty()
+        if (key.isBlank()) {
+            setStatus(dsStatus, "请填写 API Key", false)
+            return
+        }
+
+        dsSave.isEnabled = false
+        setStatus(dsStatus, "正在验证…", null)
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    Result.success(DeepSeekClient().fetch(key))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Result.failure(e)
+                }
+            }
+
+            dsSave.isEnabled = true
+            result.onSuccess { balance ->
+                // The key already works against the API; failing here means the
+                // local encrypted store rejected the write. Say so instead of
+                // showing "已连接" for a key that was never saved.
+                if (!settings.setDeepSeekKey(key)) {
+                    setStatus(dsStatus, "Key 未能写入本地加密存储，请重试", false)
+                    return@onSuccess
+                }
+                settings.clearKeysWereCleared()
+                val now = System.currentTimeMillis()
+                val snapshot = SnapshotStore.load(this@MainActivity)
+                    .withProvider(balance.copy(lastSuccessAt = now), now)
+                SnapshotStore.save(this@MainActivity, snapshot)
+                renderSnapshot(snapshot)
+                BalanceWidgetProvider.updateAll(this@MainActivity, snapshot)
+                setStatus(dsStatus, "已连接 · ${formatAmount(balance)}", true)
+                setExpanded(dsBody, dsChevron, false)
+                BalanceWorker.enqueue(this@MainActivity, RefreshLog.TRIGGER_SAVE)
+            }.onFailure { error ->
+                setStatus(dsStatus, error.toUserMessage(), false)
+            }
+        }
+    }
+
+    private fun saveAliyun() {
+        val id = aliId.text?.toString()?.trim().orEmpty()
+        val secret = aliSecret.text?.toString()?.trim().orEmpty()
+        if (id.isBlank() || secret.isBlank()) {
+            setStatus(aliStatus, "请填写 AccessKey ID 和 Secret", false)
+            return
+        }
+
+        aliSave.isEnabled = false
+        setStatus(aliStatus, "正在验证…", null)
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    Result.success(AliyunClient().fetch(id, secret))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Result.failure(e)
+                }
+            }
+
+            aliSave.isEnabled = true
+            result.onSuccess { balance ->
+                // Written as one commit so a half-saved AccessKey pair can never
+                // leave the app looking configured but unable to authenticate.
+                if (!settings.setAliyunCredentials(id, secret)) {
+                    setStatus(aliStatus, "AccessKey 未能写入本地加密存储，请重试", false)
+                    return@onSuccess
+                }
+                settings.clearKeysWereCleared()
+                val now = System.currentTimeMillis()
+                val snapshot = SnapshotStore.load(this@MainActivity)
+                    .withProvider(balance.copy(lastSuccessAt = now), now)
+                SnapshotStore.save(this@MainActivity, snapshot)
+                renderSnapshot(snapshot)
+                BalanceWidgetProvider.updateAll(this@MainActivity, snapshot)
+                setStatus(aliStatus, "已连接 · ${formatAmount(balance)}", true)
+                setExpanded(aliBody, aliChevron, false)
+                BalanceWorker.enqueue(this@MainActivity, RefreshLog.TRIGGER_SAVE)
+            }.onFailure { error ->
+                setStatus(aliStatus, error.toUserMessage(), false)
+            }
+        }
+    }
+
+    private fun refreshAllNow() {
+        if (!settings.hasAnyKey) {
+            toast("请先配置 DeepSeek 或阿里云 Key")
+            return
+        }
+        refreshNow.isEnabled = false
+        val pending = SnapshotStore.markRefreshRequested(this)
+        renderSnapshot(pending)
+        lastRefresh.text = "正在刷新…"
+        lastRefreshChip.visibility = View.GONE
+        BalanceWidgetProvider.updateAll(this, pending)
+        // Clears the widget's "刷新中…" even if this app is killed mid-refresh.
+        BalanceWorker.scheduleRefreshStateReset(this)
+
+        lifecycleScope.launch {
+            try {
+                val snapshot = repository.refreshAll(RefreshLog.TRIGGER_MANUAL)
+                renderSnapshot(snapshot)
+                renderRefreshLog()
+                BalanceWidgetProvider.updateAll(this@MainActivity, snapshot)
+                RefreshHeartbeat.schedule(this@MainActivity)
+                toast("刷新完成")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val snapshot = SnapshotStore.load(this@MainActivity)
+                    .copy(refreshRequestedAt = 0L)
+                SnapshotStore.save(this@MainActivity, snapshot)
+                renderSnapshot(snapshot)
+                renderRefreshLog()
+                BalanceWidgetProvider.updateAll(this@MainActivity, snapshot)
+                toast("刷新失败：${e.toUserMessage()}")
+            } finally {
+                refreshNow.isEnabled = true
+            }
+        }
+    }
+
+    private fun openBatterySettings() {
+        val direct = Intent(
+            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+            Uri.parse("package:$packageName")
+        )
+        try {
+            startActivity(direct)
+        } catch (e: Exception) {
+            runCatching {
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            }
+            toast("请在列表中找到“词元钱包”，设为不限制")
+        }
+    }
+
+    private fun openConsole(url: String) {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            toast("没有找到可用的浏览器")
+        }
+    }
+
+    private fun renderSnapshot(snapshot: BalanceSnapshot) {
+        updateProviderStatus(
+            statusView = dsStatus,
+            configured = settings.deepSeekKey.isNotBlank(),
+            balance = snapshot.deepSeek
+        )
+        updateProviderStatus(
+            statusView = aliStatus,
+            configured = settings.aliyunId.isNotBlank() && settings.aliyunSecret.isNotBlank(),
+            balance = snapshot.aliyun
+        )
+        val stale = isSnapshotStale(this, snapshot)
+        lastRefresh.text = when {
+            snapshot.lastSuccessAt <= 0L -> "上次成功更新：尚未更新"
+            else -> "上次成功更新：${formatTime(this, snapshot.lastSuccessAt)}"
+        }
+        // Same marker as the widgets: the sentence stays normal-weight text and
+        // the state lives in the pill next to it, so nothing is colour-coded.
+        lastRefresh.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+        lastRefreshChip.visibility = if (stale) View.VISIBLE else View.GONE
+    }
+
+    private fun renderRefreshLog() {
+        val entries = RefreshLog.load(this).take(8)
+        refreshLogList.removeAllViews()
+        refreshLogEmpty.visibility = if (entries.isEmpty()) View.VISIBLE else View.GONE
+        if (entries.isEmpty()) return
+
+        val inflater = LayoutInflater.from(this)
+        var lastDay: String? = null
+        entries.forEachIndexed { index, entry ->
+            val day = dayLabel(entry.at)
+            if (day != lastDay) {
+                val dayView = inflater.inflate(
+                    R.layout.item_refresh_log_day,
+                    refreshLogList,
+                    false
+                )
+                dayView.findViewById<TextView>(R.id.log_day).text = day
+                refreshLogList.addView(dayView)
+                lastDay = day
+            }
+
+            val row = inflater.inflate(R.layout.item_refresh_log, refreshLogList, false)
+            val textColorRes = when (entry.result) {
+                RefreshLog.RESULT_OK -> R.color.success_text
+                RefreshLog.RESULT_PARTIAL -> R.color.stale
+                else -> R.color.error_text
+            }
+            val dotColorRes = when (entry.result) {
+                RefreshLog.RESULT_OK -> R.color.success
+                RefreshLog.RESULT_PARTIAL -> R.color.stale
+                else -> R.color.error
+            }
+
+            row.findViewById<View>(R.id.log_dot).backgroundTintList =
+                ColorStateList.valueOf(ContextCompat.getColor(this, dotColorRes))
+            row.findViewById<TextView>(R.id.log_trigger).text = entry.trigger
+            row.findViewById<TextView>(R.id.log_result).apply {
+                text = entry.result
+                setTextColor(ContextCompat.getColor(this@MainActivity, textColorRes))
+            }
+            row.findViewById<TextView>(R.id.log_time).text = formatTime(this, entry.at)
+
+            val detail = row.findViewById<TextView>(R.id.log_detail)
+            if (entry.result != RefreshLog.RESULT_OK && entry.detail.isNotBlank()) {
+                detail.text = entry.detail
+                detail.setTextColor(ContextCompat.getColor(this, textColorRes))
+                detail.visibility = View.VISIBLE
+            }
+
+            row.findViewById<View>(R.id.log_divider).visibility =
+                if (index == entries.lastIndex) View.GONE else View.VISIBLE
+            refreshLogList.addView(row)
+        }
+    }
+
+    private fun dayLabel(timestamp: Long): String {
+        val day = Calendar.getInstance().apply { timeInMillis = timestamp }
+        val today = Calendar.getInstance()
+        val yesterday = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
+        return when {
+            sameDay(day, today) -> "今天"
+            sameDay(day, yesterday) -> "昨天"
+            else -> SimpleDateFormat("MM-dd", Locale.getDefault()).format(Date(timestamp))
+        }
+    }
+
+    private fun sameDay(first: Calendar, second: Calendar): Boolean {
+        return first.get(Calendar.YEAR) == second.get(Calendar.YEAR) &&
+            first.get(Calendar.DAY_OF_YEAR) == second.get(Calendar.DAY_OF_YEAR)
+    }
+
+    private fun updateProviderStatus(
+        statusView: TextView,
+        configured: Boolean,
+        balance: ProviderBalance
+    ) {
+        when {
+            // The Keystore master key stopped matching, so the stored secrets
+            // were wiped. "未配置" alone would look like the user never set it up.
+            !configured && settings.keysWereCleared ->
+                setStatus(statusView, "本地密钥已被清除，请重新填写", false)
+            !configured -> setStatus(statusView, "未配置", null)
+            !balance.error.isNullOrBlank() -> setStatus(statusView, balance.error, false)
+            else -> setStatus(statusView, "已连接 · ${formatAmount(balance)}", true)
+        }
+    }
+
+    private fun setStatus(view: TextView, text: String?, ok: Boolean?) {
+        view.text = text.orEmpty()
+        val colorRes = when (ok) {
+            true -> R.color.success
+            false -> R.color.error
+            null -> R.color.text_secondary
+        }
+        view.setTextColor(ContextCompat.getColor(this, colorRes))
+    }
+
+    private fun setupTabs(state: Bundle?) {
+        val saved = state?.getInt(KEY_TAB, R.id.nav_config) ?: R.id.nav_config
+        val initial = when (saved) {
+            R.id.nav_config, R.id.nav_refresh -> saved
+            else -> R.id.nav_config
+        }
+        bottomNav.setOnItemSelectedListener { item ->
+            showPage(item.itemId)
+            true
+        }
+        bottomNav.selectedItemId = initial
+        showPage(initial)
+    }
+
+    private fun showPage(tabId: Int) {
+        selectedTab = tabId
+        pageConfig.visibility = if (tabId == R.id.nav_config) View.VISIBLE else View.GONE
+        pageRefresh.visibility = if (tabId == R.id.nav_refresh) View.VISIBLE else View.GONE
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putInt(KEY_TAB, selectedTab)
+        super.onSaveInstanceState(outState)
+    }
+
+    private fun applySystemBars() {
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+
+        val dark = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            isAppearanceLightStatusBars = !dark
+            isAppearanceLightNavigationBars = !dark
+        }
+
+        val root = findViewById<View>(R.id.root_shell)
+        val nav = findViewById<View>(R.id.bottom_nav)
+        val start = root.paddingLeft
+        val top = root.paddingTop
+        val end = root.paddingRight
+        val navStart = nav.paddingLeft
+        val navTop = nav.paddingTop
+        val navEnd = nav.paddingRight
+        val navBottom = nav.paddingBottom
+
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            // The tab bar background should reach the bottom edge, with its
+            // content padded above vivo's gesture bar.
+            view.setPadding(start, top + bars.top, end, 0)
+            nav.setPadding(navStart, navTop, navEnd, navBottom + bars.bottom)
+            insets
+        }
+        ViewCompat.requestApplyInsets(root)
+    }
+
+    private fun toggle(body: View, chevron: TextView) {
+        setExpanded(body, chevron, body.visibility != View.VISIBLE)
+    }
+
+    private fun setExpanded(body: View, chevron: TextView, expanded: Boolean) {
+        body.visibility = if (expanded) View.VISIBLE else View.GONE
+        chevron.text = if (expanded) "▴" else "▾"
+    }
+
+    private fun applyTheme(mode: String) {
+        val nightMode = when (mode) {
+            SettingsStore.THEME_LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
+            SettingsStore.THEME_DARK -> AppCompatDelegate.MODE_NIGHT_YES
+            else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+        }
+        AppCompatDelegate.setDefaultNightMode(nightMode)
+    }
+
+    private fun toast(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+
+    companion object {
+        private const val KEY_TAB = "selected_tab"
+        private const val DEEPSEEK_CONSOLE_URL = "https://platform.deepseek.com/usage"
+        // Deliberately not the Aliyun cost center: only model calls are billed
+        // here, and this page is far easier to read than the console.
+        private const val ALIYUN_CONSOLE_URL =
+            "https://platform.qianwenai.com/home/billing/pay-as-you-go"
+    }
+}

@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- DeepSeek-inspired blue palette -->
+    <color name="brand">#FF23272E</color>
+    <color name="on_primary">#FFFFFFFF</color>
+    <color name="brand_container">#FFEFF1F4</color>
+    <color name="on_brand_container">#FF23272E</color>
+    <color name="accent">#FF7C8CFF</color>
+    <color name="on_accent">#FFFFFFFF</color>
+    <color name="accent_container">#FFEEF1FF</color>
+    <color name="on_accent_container">#FF202A55</color>
+
+    <!-- App surfaces and text -->
+    <color name="surface">#FFF6F7F9</color>
+    <color name="surface_container">#FFFFFFFF</color>
+    <color name="surface_variant">#FFEFF1F4</color>
+    <color name="on_surface">#FF0F172A</color>
+    <color name="on_surface_variant">#FF5B6478</color>
+    <color name="outline">#FFE3E6EB</color>
+
+    <!-- Vendor identity: official brand colors, identical in both themes and
+         in the launcher icon. -->
+    <color name="vendor_deepseek">#FF4D6BFE</color>
+    <color name="vendor_aliyun">#FFFF6A00</color>
+    <color name="vendor_deepseek_light">#FF4D6BFE</color>
+    <color name="vendor_aliyun_light">#FFFF6A00</color>
+    <!-- The widget palette asks for the dark colors even when the system is in
+         light mode (in-app "深色" theme). Without a default value here
+         getColor() throws Resources.NotFoundException and the widget stops
+         updating. Keep these in sync with values-night/colors.xml. -->
+    <color name="vendor_deepseek_dark">#FF4D6BFE</color>
+    <color name="vendor_aliyun_dark">#FFFF6A00</color>
+
+    <color name="success">#FF10B981</color>
+    <color name="success_text">#FF059669</color>
+    <color name="error">#FFEF4444</color>
+    <color name="error_text">#FFDC2626</color>
+    <color name="text_secondary">#FF5B6478</color>
+    <color name="text_tertiary">#FF8A93A6</color>
+    <!-- Text use only (refresh log "部分成功"): a solid amber fill would be
+         unreadable as a foreground colour on a light surface. -->
+    <color name="stale">#FFB45309</color>
+
+    <!-- Stale marker pill. One pair of values for both themes on purpose: the
+         pill carries the state, and giving it a different fill per theme made
+         the dark variant nearly invisible against #1F1F1F. Kept out of
+         values-night so the two can never drift apart. -->
+    <color name="stale_chip_bg">#FFFBBF24</color>
+    <color name="stale_chip_text">#FF1F1F1F</color>
+
+    <!-- Launcher icon ground: neutral slate, so hue on the icon means "vendor". -->
+    <color name="ic_launcher_background">#FF23272E</color>
+
+    <!-- Widget -->
+    <color name="widget_bg">#FFFFFFFF</color>
+    <color name="widget_text">#FF0F172A</color>
+    <color name="widget_secondary">#FF5B6478</color>
+    <color name="widget_bg_dark">#FF1F1F1F</color>
+    <color name="widget_text_dark">#FFF3F5FA</color>
+    <color name="widget_secondary_dark">#FFA3ACBF</color>
+    <color name="widget_bg_light">#FFFFFFFF</color>
+    <color name="widget_text_light">#FF0F172A</color>
+    <color name="widget_secondary_light">#FF5B6478</color>
+    <color name="error_dark">#FFF87171</color>
+    <color name="error_light">#FFDC2626</color>
+    <color name="stale_dark">#FFFBBF24</color>
+    <color name="stale_light">#FFB45309</color>
+
+
+</resources>

@@ -1,0 +1,71 @@
+package io.github.balancewidget
+
+import android.content.Context
+
+object SnapshotStore {
+
+    private const val PREFS = "balance_snapshot"
+
+    fun load(context: Context): BalanceSnapshot {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        // Installs upgraded from before the per-provider success time fall back
+        // to the old global value instead of claiming the data was never fetched.
+        val legacySuccess = prefs.getLong("last_success", prefs.getLong("last_updated", 0L))
+        return BalanceSnapshot(
+            deepSeek = ProviderBalance(
+                provider = Provider.DEEPSEEK,
+                amount = prefs.getString("ds_amount", null),
+                currency = prefs.getString("ds_currency", "CNY") ?: "CNY",
+                detail = prefs.getString("ds_detail", null),
+                error = prefs.getString("ds_error", null),
+                updatedAt = prefs.getLong("ds_updated", 0L),
+                lastSuccessAt = prefs.getLong("ds_last_success", legacySuccess)
+            ),
+            aliyun = ProviderBalance(
+                provider = Provider.ALIYUN,
+                amount = prefs.getString("ali_amount", null),
+                currency = prefs.getString("ali_currency", "CNY") ?: "CNY",
+                detail = prefs.getString("ali_detail", null),
+                error = prefs.getString("ali_error", null),
+                updatedAt = prefs.getLong("ali_updated", 0L),
+                lastSuccessAt = prefs.getLong("ali_last_success", legacySuccess)
+            ),
+            // Older installs only have "last_updated"; show that until the first
+            // success after upgrading instead of "尚未更新".
+            lastUpdated = prefs.getLong("last_updated", 0L),
+            lastSuccessAt = legacySuccess,
+            refreshRequestedAt = prefs.getLong("refresh_requested", 0L)
+        )
+    }
+
+    fun save(context: Context, snapshot: BalanceSnapshot) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString("ds_amount", snapshot.deepSeek.amount)
+            .putString("ds_currency", snapshot.deepSeek.currency)
+            .putString("ds_detail", snapshot.deepSeek.detail)
+            .putString("ds_error", snapshot.deepSeek.error)
+            .putLong("ds_updated", snapshot.deepSeek.updatedAt)
+            .putLong("ds_last_success", snapshot.deepSeek.lastSuccessAt)
+            .putString("ali_amount", snapshot.aliyun.amount)
+            .putString("ali_currency", snapshot.aliyun.currency)
+            .putString("ali_detail", snapshot.aliyun.detail)
+            .putString("ali_error", snapshot.aliyun.error)
+            .putLong("ali_updated", snapshot.aliyun.updatedAt)
+            .putLong("ali_last_success", snapshot.aliyun.lastSuccessAt)
+            .putLong("last_updated", snapshot.lastUpdated)
+            .putLong("last_success", snapshot.lastSuccessAt)
+            .putLong("refresh_requested", snapshot.refreshRequestedAt)
+            .apply()
+    }
+
+    /**
+     * Marks a manual refresh as requested. The renderers treat this as a short
+     * lived "刷新中…" state, so a failed/never-run refresh cannot leave the
+     * widget stuck forever.
+     */
+    fun markRefreshRequested(context: Context): BalanceSnapshot {
+        val snapshot = load(context).copy(refreshRequestedAt = System.currentTimeMillis())
+        save(context, snapshot)
+        return snapshot
+    }
+}
