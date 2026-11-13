@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dark surface; the system configuration picks this one over the light copy. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FF1F1F1F" />
+    <corners android:radius="24dp" />
+</shape>

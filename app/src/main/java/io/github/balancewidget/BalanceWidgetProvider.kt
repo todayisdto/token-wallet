@@ -4,7 +4,6 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
 import androidx.work.WorkManager
 
 class BalanceWidgetProvider : AppWidgetProvider() {
@@ -15,11 +14,10 @@ class BalanceWidgetProvider : AppWidgetProvider() {
         appWidgetIds: IntArray
     ) {
         val snapshot = SnapshotStore.load(context)
-        val themeMode = themeMode(context)
         appWidgetIds.forEach { widgetId ->
             appWidgetManager.updateAppWidget(
                 widgetId,
-                WidgetRenderer.build(context, snapshot, themeMode = themeMode)
+                WidgetRenderer.build(context, snapshot)
             )
         }
         scheduleBackgroundWork(context)
@@ -39,12 +37,6 @@ class BalanceWidgetProvider : AppWidgetProvider() {
         if (!hasAnyWidget(context)) cancelBackgroundWork(context)
     }
 
-    override fun onReceive(context: Context, intent: Intent) {
-        super.onReceive(context, intent)
-        if (intent.action == Intent.ACTION_CONFIGURATION_CHANGED) {
-            updateAll(context, SnapshotStore.load(context))
-        }
-    }
 
     companion object {
 
@@ -53,11 +45,10 @@ class BalanceWidgetProvider : AppWidgetProvider() {
             val ids = manager.getAppWidgetIds(
                 ComponentName(context, BalanceWidgetProvider::class.java)
             )
-            val themeMode = themeMode(context)
             ids.forEach { widgetId ->
                 manager.updateAppWidget(
                     widgetId,
-                    WidgetRenderer.build(context, snapshot, themeMode = themeMode)
+                    WidgetRenderer.build(context, snapshot)
                 )
             }
             BalanceWidget2x2Provider.updateAll(context, snapshot)
@@ -85,9 +76,5 @@ class BalanceWidgetProvider : AppWidgetProvider() {
             return runCatching { SettingsStore.get(context).refreshMinutes }.getOrDefault(60)
         }
 
-        private fun themeMode(context: Context): String {
-            return runCatching { SettingsStore.get(context).themeMode }
-                .getOrDefault(SettingsStore.THEME_SYSTEM)
-        }
     }
 }

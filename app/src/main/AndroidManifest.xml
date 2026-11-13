@@ -16,7 +16,6 @@
 
         <activity
             android:name=".MainActivity"
-            android:configChanges="uiMode"
             android:exported="true"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -31,7 +30,6 @@
             android:label="@string/widget_4x2_name">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="android.intent.action.CONFIGURATION_CHANGED" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -54,20 +52,11 @@
         </receiver>
 
         <receiver
-            android:name=".ThemeChangeReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.CONFIGURATION_CHANGED" />
-            </intent-filter>
-        </receiver>
-
-        <receiver
             android:name=".BalanceWidget2x2Provider"
             android:exported="true"
             android:label="@string/widget_2x2_name">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="android.intent.action.CONFIGURATION_CHANGED" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"

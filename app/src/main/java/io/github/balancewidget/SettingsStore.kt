@@ -69,11 +69,6 @@ class SettingsStore private constructor(context: Context) {
             .putInt(KEY_REFRESH_MINUTES, value.coerceIn(MIN_REFRESH_MINUTES, MAX_REFRESH_MINUTES))
             .apply()
 
-    var themeMode: String
-        get() = prefs.getString(KEY_THEME_MODE, THEME_SYSTEM)
-            ?.takeIf { it in setOf(THEME_SYSTEM, THEME_LIGHT, THEME_DARK) }
-            ?: THEME_SYSTEM
-        set(value) = prefs.edit().putString(KEY_THEME_MODE, value).apply()
 
     var hideRecents: Boolean
         get() = prefs.getBoolean(KEY_HIDE_RECENTS, false)
@@ -84,7 +79,7 @@ class SettingsStore private constructor(context: Context) {
             (aliyunId.isNotBlank() && aliyunSecret.isNotBlank())
 
     /**
-     * Theme/interval/recents used to live in the encrypted file. Copy them over
+     * Interval/recents used to live in the encrypted file. Copy them over
      * once so upgrading users keep their choices. Only called from the app, not
      * from widgets, so the widget path never touches the Keystore for this.
      */
@@ -96,10 +91,6 @@ class SettingsStore private constructor(context: Context) {
         val minutes = legacy.getInt(KEY_REFRESH_MINUTES, 0)
         if (minutes in MIN_REFRESH_MINUTES..MAX_REFRESH_MINUTES) {
             editor.putInt(KEY_REFRESH_MINUTES, minutes)
-        }
-        val theme = legacy.getString(KEY_THEME_MODE, null)
-        if (theme == THEME_SYSTEM || theme == THEME_LIGHT || theme == THEME_DARK) {
-            editor.putString(KEY_THEME_MODE, theme)
         }
         if (legacy.contains(KEY_HIDE_RECENTS)) {
             editor.putBoolean(KEY_HIDE_RECENTS, legacy.getBoolean(KEY_HIDE_RECENTS, false))
@@ -161,7 +152,6 @@ class SettingsStore private constructor(context: Context) {
         private const val KEY_ALIYUN_ID = "aliyun_access_key_id"
         private const val KEY_ALIYUN_SECRET = "aliyun_access_key_secret"
         private const val KEY_REFRESH_MINUTES = "refresh_minutes"
-        private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_HIDE_RECENTS = "hide_recents"
         private const val KEY_MIGRATED = "legacy_settings_migrated"
         private const val KEY_KEYS_CLEARED = "encrypted_keys_cleared"
@@ -169,9 +159,6 @@ class SettingsStore private constructor(context: Context) {
         private const val MIN_REFRESH_MINUTES = 15
         private const val MAX_REFRESH_MINUTES = 360
 
-        const val THEME_SYSTEM = "system"
-        const val THEME_LIGHT = "light"
-        const val THEME_DARK = "dark"
 
         @Volatile
         private var instance: SettingsStore? = null

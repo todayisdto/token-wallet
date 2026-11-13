@@ -3,7 +3,6 @@ package io.github.balancewidget
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
@@ -13,13 +12,7 @@ import androidx.core.content.ContextCompat
 
 object WidgetRenderer2x2 {
 
-    fun build(
-        context: Context,
-        snapshot: BalanceSnapshot,
-        themeMode: String = SettingsStore.THEME_SYSTEM
-    ): RemoteViews {
-        val palette = palette(context, themeMode)
-        val systemTheme = themeMode == SettingsStore.THEME_SYSTEM
+    fun build(context: Context, snapshot: BalanceSnapshot): RemoteViews {
         val views = RemoteViews(context.packageName, R.layout.widget_balance_2x2)
 
         val pending = isRefreshPending(snapshot)
@@ -33,29 +26,28 @@ object WidgetRenderer2x2 {
             if (stale) View.VISIBLE else View.GONE
         )
         views.setTextViewText(R.id.widget2_stale_chip, "旧")
-        // In system mode the layout's @color/widget_text is resolved by the
-        // launcher against its own night configuration, so it always matches
-        // the @color/widget_bg surface behind it. A color computed here comes
-        // from this process' configuration instead, which AppCompat can rewrite
-        // independently of the launcher; painting it over a dark background was
-        // what made the title invisible in dark mode.
-        if (!systemTheme) {
-            runCatching {
-                views.setInt(R.id.widget2_root, "setBackgroundColor", palette.background)
-            }
-            views.setTextColor(R.id.widget2_title, palette.text)
-            views.setTextColor(R.id.widget2_refresh, palette.text)
-            views.setTextColor(R.id.widget2_ds_label, palette.secondary)
-            views.setTextColor(R.id.widget2_ali_label, palette.secondary)
-        }
 
-        bindAmount(views, snapshot.deepSeek, R.id.widget2_ds_amount, palette, systemTheme)
-        bindAmount(views, snapshot.aliyun, R.id.widget2_ali_amount, palette, systemTheme)
+        // Same rule as the 4x2: surface and base text colours come from the
+        // layout's light/night resources, so the launcher can repaint the widget
+        // when the system switches theme without waiting for an update from the app.
+        val error = ContextCompat.getColor(context, R.color.error)
+        val secondary = ContextCompat.getColor(context, R.color.widget_secondary)
+
+        bindAmount(views, snapshot.deepSeek, R.id.widget2_ds_amount, error, secondary)
+        bindAmount(views, snapshot.aliyun, R.id.widget2_ali_amount, error, secondary)
 
         views.setInt(R.id.widget2_ds_dot, "setImageResource", R.drawable.dot)
         views.setInt(R.id.widget2_ali_dot, "setImageResource", R.drawable.dot)
-        views.setInt(R.id.widget2_ds_dot, "setColorFilter", palette.dsDot)
-        views.setInt(R.id.widget2_ali_dot, "setColorFilter", palette.aliDot)
+        views.setInt(
+            R.id.widget2_ds_dot,
+            "setColorFilter",
+            ContextCompat.getColor(context, R.color.vendor_deepseek)
+        )
+        views.setInt(
+            R.id.widget2_ali_dot,
+            "setColorFilter",
+            ContextCompat.getColor(context, R.color.vendor_aliyun)
+        )
 
         views.setOnClickPendingIntent(R.id.widget2_root, openApp(context))
         views.setOnClickPendingIntent(R.id.widget2_refresh, refresh(context))
@@ -66,14 +58,13 @@ object WidgetRenderer2x2 {
         views: RemoteViews,
         balance: ProviderBalance,
         amountId: Int,
-        palette: Palette,
-        systemTheme: Boolean
+        error: Int,
+        secondary: Int
     ) {
         val hasError = !balance.error.isNullOrBlank()
         val color = when {
-            hasError -> palette.error
-            balance.amount.isNullOrBlank() -> palette.secondary
-            !systemTheme -> palette.text
+            hasError -> error
+            balance.amount.isNullOrBlank() -> secondary
             else -> null
         }
         // Use a span rather than setTextColor so a red error color cannot stick
@@ -90,47 +81,6 @@ object WidgetRenderer2x2 {
             setSpan(ForegroundColorSpan(color), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
     }
-
-    private fun palette(context: Context, themeMode: String): Palette {
-        val dark = when (themeMode) {
-            SettingsStore.THEME_LIGHT -> false
-            SettingsStore.THEME_DARK -> true
-            else -> {
-                val nightMode = context.resources.configuration.uiMode and
-                    Configuration.UI_MODE_NIGHT_MASK
-                nightMode == Configuration.UI_MODE_NIGHT_YES
-            }
-        }
-
-        return if (dark) {
-            Palette(
-                background = ContextCompat.getColor(context, R.color.widget_bg_dark),
-                text = ContextCompat.getColor(context, R.color.widget_text_dark),
-                secondary = ContextCompat.getColor(context, R.color.widget_secondary_dark),
-                error = ContextCompat.getColor(context, R.color.error_dark),
-                dsDot = ContextCompat.getColor(context, R.color.vendor_deepseek_dark),
-                aliDot = ContextCompat.getColor(context, R.color.vendor_aliyun_dark)
-            )
-        } else {
-            Palette(
-                background = ContextCompat.getColor(context, R.color.widget_bg_light),
-                text = ContextCompat.getColor(context, R.color.widget_text_light),
-                secondary = ContextCompat.getColor(context, R.color.widget_secondary_light),
-                error = ContextCompat.getColor(context, R.color.error_light),
-                dsDot = ContextCompat.getColor(context, R.color.vendor_deepseek_light),
-                aliDot = ContextCompat.getColor(context, R.color.vendor_aliyun_light)
-            )
-        }
-    }
-
-    private data class Palette(
-        val background: Int,
-        val text: Int,
-        val secondary: Int,
-        val error: Int,
-        val dsDot: Int,
-        val aliDot: Int
-    )
 
     private fun openApp(context: Context): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {

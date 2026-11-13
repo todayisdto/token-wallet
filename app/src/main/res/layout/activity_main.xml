@@ -368,8 +368,6 @@
                 android:paddingEnd="20dp"
                 android:paddingBottom="24dp">
 
-                <include layout="@layout/appearance_settings_card" />
-
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

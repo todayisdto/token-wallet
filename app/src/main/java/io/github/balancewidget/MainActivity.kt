@@ -13,11 +13,9 @@ import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.LinearLayout
-import android.widget.RadioGroup
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatDelegate
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
@@ -65,7 +63,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bottomNav: BottomNavigationView
 
     private lateinit var intervalSpinner: Spinner
-    private lateinit var themeGroup: RadioGroup
     private lateinit var refreshNow: MaterialButton
     private lateinit var batteryRow: View
     private lateinit var batteryChip: TextView
@@ -77,7 +74,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var refreshLogEmpty: TextView
 
     private var selectedTab = R.id.nav_config
-    private var recreatingForTheme = false
 
     /**
      * The single source of truth for the refresh interval options: the minutes
@@ -99,7 +95,6 @@ class MainActivity : AppCompatActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         settings = SettingsStore.get(this)
         settings.migrateLegacySettings()
-        applyTheme(settings.themeMode)
         setContentView(R.layout.activity_main)
         applySystemBars()
 
@@ -130,18 +125,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onConfigurationChanged(newConfig: Configuration) {
-        super.onConfigurationChanged(newConfig)
-        if (settings.themeMode == SettingsStore.THEME_SYSTEM) {
-            BalanceWidgetProvider.updateAll(this, SnapshotStore.load(this))
-            recreatingForTheme = true
-            recreate()
-        }
-    }
-
     override fun onStop() {
         super.onStop()
-        if (!isChangingConfigurations && !recreatingForTheme && settings.hideRecents) {
+        if (!isChangingConfigurations && settings.hideRecents) {
             finishAndRemoveTask()
         }
     }
@@ -167,7 +153,6 @@ class MainActivity : AppCompatActivity() {
         aliConsole = findViewById(R.id.ali_console)
         aliStatus = findViewById(R.id.ali_status)
         intervalSpinner = findViewById(R.id.interval_spinner)
-        themeGroup = findViewById(R.id.theme_group)
         refreshNow = findViewById(R.id.refresh_now)
         batteryRow = findViewById(R.id.battery_row)
         batteryChip = findViewById(R.id.battery_chip)
@@ -198,11 +183,6 @@ class MainActivity : AppCompatActivity() {
         intervalSpinner.setSelection(selected, false)
         ignoreSpinnerChange = false
 
-        when (settings.themeMode) {
-            SettingsStore.THEME_LIGHT -> themeGroup.check(R.id.theme_light)
-            SettingsStore.THEME_DARK -> themeGroup.check(R.id.theme_dark)
-            else -> themeGroup.check(R.id.theme_system)
-        }
         hideRecentsSwitch.isChecked = settings.hideRecents
 
         setExpanded(dsBody, dsChevron, settings.deepSeekKey.isBlank())
@@ -231,20 +211,6 @@ class MainActivity : AppCompatActivity() {
 
         dsHeader.setOnClickListener { toggle(dsBody, dsChevron) }
         aliHeader.setOnClickListener { toggle(aliBody, aliChevron) }
-
-        themeGroup.setOnCheckedChangeListener { _, checkedId ->
-            if (checkedId == View.NO_ID) return@setOnCheckedChangeListener
-            val mode = when (checkedId) {
-                R.id.theme_light -> SettingsStore.THEME_LIGHT
-                R.id.theme_dark -> SettingsStore.THEME_DARK
-                else -> SettingsStore.THEME_SYSTEM
-            }
-            if (settings.themeMode != mode) {
-                settings.themeMode = mode
-                BalanceWidgetProvider.updateAll(this, SnapshotStore.load(this))
-                applyTheme(mode)
-            }
-        }
 
         intervalSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(
@@ -617,14 +583,6 @@ class MainActivity : AppCompatActivity() {
         chevron.text = if (expanded) "▴" else "▾"
     }
 
-    private fun applyTheme(mode: String) {
-        val nightMode = when (mode) {
-            SettingsStore.THEME_LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
-            SettingsStore.THEME_DARK -> AppCompatDelegate.MODE_NIGHT_YES
-            else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
-        }
-        AppCompatDelegate.setDefaultNightMode(nightMode)
-    }
 
     private fun toast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()

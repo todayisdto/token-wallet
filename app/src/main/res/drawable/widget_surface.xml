@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Light widget surface. res/drawable-night holds the dark one, so the launcher
+     can repaint the widget by itself when the system switches between light and
+     dark; the app does not have to push anything for that. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FFFFFFFF" />
+    <corners android:radius="24dp" />
+</shape>
