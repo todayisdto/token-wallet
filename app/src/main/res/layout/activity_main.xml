@@ -195,14 +195,15 @@
 
                         <TextView
                             android:id="@+id/ds_console"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:background="?attr/selectableItemBackground"
+                            android:layout_width="wrap_content"
+                            android:layout_height="40dp"
+                            android:layout_marginTop="12dp"
+                            android:background="@drawable/billing_entry"
                             android:clickable="true"
                             android:focusable="true"
-                            android:paddingTop="10dp"
-                            android:paddingBottom="4dp"
+                            android:gravity="center_vertical"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp"
                             android:text="查看模型账单 ↗"
                             android:textColor="?attr/colorPrimary"
                             android:textSize="12sp" />
@@ -332,14 +333,15 @@
 
                         <TextView
                             android:id="@+id/ali_console"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:background="?attr/selectableItemBackground"
+                            android:layout_width="wrap_content"
+                            android:layout_height="40dp"
+                            android:layout_marginTop="12dp"
+                            android:background="@drawable/billing_entry"
                             android:clickable="true"
                             android:focusable="true"
-                            android:paddingTop="10dp"
-                            android:paddingBottom="4dp"
+                            android:gravity="center_vertical"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp"
                             android:text="查看模型账单 ↗"
                             android:textColor="?attr/colorPrimary"
                             android:textSize="12sp" />
@@ -555,7 +557,6 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="10dp"
-                            android:background="?attr/selectableItemBackground"
                             android:clickable="true"
                             android:focusable="true"
                             android:gravity="center_vertical"
@@ -595,12 +596,29 @@
                             </LinearLayout>
 
                             <TextView
+                                android:id="@+id/battery_chip"
                                 android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
+                                android:layout_height="24dp"
+                                android:layout_gravity="center_vertical"
                                 android:layout_marginStart="8dp"
-                                android:text="›"
-                                android:textColor="?attr/colorOnSurfaceVariant"
-                                android:textSize="22sp" />
+                                android:background="@drawable/battery_chip"
+                                android:gravity="center"
+                                android:includeFontPadding="false"
+                                android:paddingStart="9dp"
+                                android:paddingEnd="9dp"
+                                android:text="✓ 已关闭"
+                                android:textColor="@color/battery_chip_text"
+                                android:textSize="11sp"
+                                android:visibility="gone" />
+
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:layout_gravity="center_vertical"
+                                android:layout_marginStart="6dp"
+                                android:contentDescription="打开设置"
+                                android:src="@drawable/ic_chevron_right"
+                                android:tint="?attr/colorOnSurfaceVariant" />
                         </LinearLayout>
 
                         <View
@@ -614,7 +632,6 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
-                            android:background="?attr/selectableItemBackground"
                             android:clickable="true"
                             android:focusable="true"
                             android:gravity="center_vertical"

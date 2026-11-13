@@ -6,6 +6,7 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
@@ -67,6 +68,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var themeGroup: RadioGroup
     private lateinit var refreshNow: MaterialButton
     private lateinit var batteryRow: View
+    private lateinit var batteryChip: TextView
     private lateinit var hideRecentsRow: View
     private lateinit var hideRecentsSwitch: SwitchMaterial
     private lateinit var lastRefresh: TextView
@@ -116,6 +118,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        renderBatteryChip()
         val snapshot = SnapshotStore.load(this)
         renderSnapshot(snapshot)
         renderRefreshLog()
@@ -167,6 +170,7 @@ class MainActivity : AppCompatActivity() {
         themeGroup = findViewById(R.id.theme_group)
         refreshNow = findViewById(R.id.refresh_now)
         batteryRow = findViewById(R.id.battery_row)
+        batteryChip = findViewById(R.id.battery_chip)
         hideRecentsRow = findViewById(R.id.hide_recents_row)
         hideRecentsSwitch = findViewById(R.id.hide_recents_switch)
         lastRefresh = findViewById(R.id.last_refresh)
@@ -391,6 +395,17 @@ class MainActivity : AppCompatActivity() {
                 refreshNow.isEnabled = true
             }
         }
+    }
+
+    /**
+     * Shows the "已关闭" chip when the system reports that this app is exempt from
+     * battery optimisation. The state is read on every resume, so it follows what
+     * the user changed in Settings — nothing about it is stored locally.
+     */
+    private fun renderBatteryChip() {
+        val power = getSystemService(PowerManager::class.java)
+        val exempt = power?.isIgnoringBatteryOptimizations(packageName) == true
+        batteryChip.visibility = if (exempt) View.VISIBLE else View.GONE
     }
 
     private fun openBatterySettings() {

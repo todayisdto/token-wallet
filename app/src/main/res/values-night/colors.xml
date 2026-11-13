@@ -29,6 +29,12 @@
     <color name="vendor_deepseek_dark">#FF4D6BFE</color>
     <color name="vendor_aliyun_dark">#FFFF6A00</color>
 
+    <!-- Battery chip and billing-entry ripple, dark-theme values. -->
+    <color name="battery_chip_bg">#2234D399</color>
+    <color name="battery_chip_stroke">#5534D399</color>
+    <color name="battery_chip_text">#FF34D399</color>
+    <color name="billing_entry_ripple">#12FFFFFF</color>
+
     <color name="widget_bg">#FF1F1F1F</color>
     <color name="widget_text">#FFF3F5FA</color>
     <color name="widget_secondary">#FFA3ACBF</color>
